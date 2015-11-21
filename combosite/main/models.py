@@ -18,6 +18,8 @@ class Client(models.Model):
     mac_address = models.CharField(_('MAC address'), max_length=17, unique=True)
     network = models.ForeignKey(Network, verbose_name=_('network'), blank=True,
                                 null=True)
+    ul_speed = models.FloatField(_('uplink speed'), default=0.0)
+    dl_speed = models.FloatField(_('downlink speed'), default=0.0)
 
     def __str__(self):
         return self.name

@@ -5,4 +5,7 @@ urlpatterns = patterns('main.views',
    url(r'^getnetwork/$',
        views.GetNetworkView.as_view(),
        name='main:get_network'),
+   url(r'^setspeed/$',
+       views.SetSpeedView.as_view(),
+       name='main:set_speed'),
 )
