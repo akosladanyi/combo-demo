@@ -1,7 +1,54 @@
 #!/usr/bin/python3
-from gi.repository import Gtk
+from gi.repository import Gtk, GLib, GObject
 import json
 import subprocess
+import datetime as dt
+import threading
+from time import sleep
+from urllib.request import urlopen
+from urllib.error import URLError
+from urllib.parse import urlencode
+
+
+class NetDevice:
+    def __init__(self, name):
+        self.name = name
+        self.prev_rx_bytes = self._get_rx_bytes()
+        self.prev_tx_bytes = self._get_tx_bytes()
+        self.ts = dt.datetime.now()
+        self.N = 5
+        self.buff_rx = [0] * self.N
+        self.buff_tx = [0] * self.N
+        self.idx = 0
+
+    def get_speed(self):
+        rx_bytes = self._get_rx_bytes()
+        tx_bytes = self._get_tx_bytes()
+        now = dt.datetime.now()
+        delta = now - self.ts
+        rx_speed = (rx_bytes - self.prev_rx_bytes) / delta.total_seconds()
+        tx_speed = (tx_bytes - self.prev_tx_bytes) / delta.total_seconds()
+        self.ts = now
+        self.buff_rx[self.idx] = rx_speed
+        self.buff_tx[self.idx] = tx_speed
+        self.idx = (self.idx + 1) % self.N
+        self.prev_rx_bytes = rx_bytes
+        self.prev_tx_bytes = tx_bytes
+        avg_rx = sum(self.buff_rx) / self.N
+        avg_tx = sum(self.buff_tx) / self.N
+        return (avg_rx, avg_tx)
+
+    def _get_rx_bytes(self):
+        fn = '/sys/class/net/{}/statistics/rx_bytes'.format(self.name)
+        with open(fn) as f:
+            rx_bytes = int(f.read())
+        return rx_bytes
+
+    def _get_tx_bytes(self):
+        fn = '/sys/class/net/{}/statistics/tx_bytes'.format(self.name)
+        with open(fn) as f:
+            tx_bytes = int(f.read())
+        return tx_bytes
 
 
 class Interface:
@@ -190,9 +237,122 @@ def run_cmd(cmd):
     return ret
 
 
-test = False
+def select_network_1(name):
+    for row in win.rows:
+        if row.curr_network.name == name and row.interface.is_up:
+            return
+    for net in win.networks:
+        if net.name == name:
+            break
+    print(net)
+    n = 0
+    for net2 in win.networks:
+        if net2.type != net.type:
+            continue
+        if net2 == net:
+            break
+        n += 1
+    print(n)
+    for i, iface in enumerate(win.interfaces):
+        if iface.type == net.type:
+            break
+    print(i, iface)
+    row = win.rows[i]
+    if row.sw.get_active():
+        row.sw.set_active(False)
+    row.cbt.set_active(n)
+    row.sw.set_active(True)
+
+
+def select_network_2(name):
+    for row in win.rows:
+        if row.curr_network.name == name and row.interface.is_up:
+            return
+    for net in win.networks:
+        if net.name == name:
+            break
+    print(net)
+    n = 0
+    for net2 in win.networks:
+        if net2.type != net.type:
+            continue
+        if net2 == net:
+            break
+        n += 1
+    print(n)
+    old_found = False
+    for i_old, iface_old in enumerate(win.interfaces):
+        if iface_old.type == net.type and iface_old.is_up:
+            old_found = True
+            break
+    if old_found:
+        print('old', i_old, iface_old)
+    for i_new, iface_new in enumerate(win.interfaces):
+        if iface_new.type == net.type and not iface_new.is_up:
+            break
+    print('new', i_new, iface_new)
+    row_new = win.rows[i_new]
+    row_new.cbt.set_active(n)
+    row_new.sw.set_active(True)
+    if old_found:
+        row_old = win.rows[i_old]
+        row_old.sw.set_active(False)
+
+
+def update_server():
+    while True:
+        rx_speed = 0.0
+        tx_speed = 0.0
+        for net_dev in net_dev_lst:
+            rxs, txs = net_dev.get_speed()
+            rx_speed += rxs
+            tx_speed += txs
+        rx_speed /= 1024.0
+        tx_speed /= 1024.0
+        qs = urlencode({'c': CLIENT_NAME, 'ul': tx_speed, 'dl': rx_speed})
+        url = 'http://{}:{}/main/setspeed/?{}'.format(SERVER, PORT, qs)
+        print('Update speed: UL={:.1f} KiBps DL={:.1f} KiBps'.format(tx_speed,
+                                                                     rx_speed))
+        try:
+            resp = urlopen(url, timeout=5)
+        except URLError:
+            print('Could not connect to server.')
+        else:
+            print('OK')
+
+        url = 'http://{}:{}/main/getnetwork/?c={}'.format(SERVER, PORT, CLIENT_NAME)
+        try:
+            resp = urlopen(url, timeout=5)
+        except URLError:
+            print('Could not connect to server.')
+        else:
+            conn = json.loads(resp.read().decode('utf-8'))
+            print('Network name: {}'.format(conn))
+            # GLib.idle_add(select_network_1, conn)
+            GLib.idle_add(select_network_2, conn)
+        sleep(3)
+
+
+# SERVER = '192.168.1.4'
+SERVER = '127.0.0.1'
+PORT = 8000
+CLIENT_NAME = 'client_1'
+
+test = True
 run_cmd(['rfkill', 'unblock', 'wifi'])
+
+GObject.threads_init()
+
 win = MyWindow()
 win.connect("delete-event", Gtk.main_quit)
 win.show_all()
+
+net_dev_lst = []
+for iface in win.interfaces:
+    net_dev_lst.append(NetDevice(iface.device))
+
+thread = threading.Thread(target=update_server)
+thread.daemon = True
+thread.start()
+
 Gtk.main()
