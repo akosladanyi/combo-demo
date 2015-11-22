@@ -2,8 +2,16 @@ from django.db import models
 from django.utils.translation import ugettext_lazy as _
 
 
+NETWORK_TYPE_CHOICES = (
+    ('W', _('Wi-Fi')),
+    ('L', _('LTE')),
+)
+
+
 class Network(models.Model):
     name = models.CharField(_('name'), max_length=128, unique=True)
+    type = models.CharField(_('type'), max_length=1,
+                            choices=NETWORK_TYPE_CHOICES)
 
     def __str__(self):
         return self.name

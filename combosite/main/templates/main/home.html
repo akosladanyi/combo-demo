@@ -1,0 +1,38 @@
+{% extends 'main/base.html' %}
+{% load i18n staticfiles %}
+
+{% block fulltitle %}{% trans 'COMBO' %}{% endblock %}
+
+{% block content %}
+<div class="container">
+
+<div class="jumbotron">
+  <h1>COMBO uDPM demo</h1>
+  <p>Decision Engine</p>
+</div>
+
+<div class="container">
+  <div class="row">
+    {% for network in networks %}
+    <div class="col-lg-4">
+      {% if network.type == 'W' %}
+      <img src="{% static 'wifi.png' %}" alt="Wi-Fi" class="img-rounded" width="80" height="84">
+      {% else %}
+      <img src="{% static 'lte.png' %}" alt="LTE" class="img-rounded" width="80" height="84">
+      {% endif %}
+      <h2>{{ network.name }}</h2>
+      <h3>Connected clients</h3>
+      <ul id="client_list_{{ network.id }}">
+      </ul>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+</div>
+
+{% endblock %}
+
+{% block extrascript %}
+<script type="text/javascript" src="{% static 'main/home.js' %}"></script>
+{% endblock %}
